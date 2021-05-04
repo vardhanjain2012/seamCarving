@@ -114,20 +114,41 @@ def deletePoints(img, seamPoints, alongX):
 				newImg[x, i-1] = img[x, i]
 	return newImg
 
-def mapSeamPoints(seamPoints, inverseImgMap):
-	mappedSeamPoints = []
-	for (x, y) in seamPoints:
-		mappedSeamPoints.append(inverseImgMap[x, y])
-	return mappedSeamPoints
+def addPoints(img, seamPoints, alongX):
+	if(alongX):
+		newImg = np.insert(img, -1, 1, axis=0)
+		for (x, y) in seamPoints:
+			if(x==0 or type(img[0, 0]) is tuple):
+				newImg[x, y] = img[x, y]
+			else:
+				# TODO: ASK: IS AVERAGE CORRECT?
+				newImg[x, y] = (img[x, y]/2 + img[x-1, y]/2)
+			for i in range(x, img.shape[0]):
+				newImg[i+1, y] = img[i, y]
+	else:
+		newImg = np.insert(img, -1, 1, axis=1)
+		for (x, y) in seamPoints:
+			if(y==0 or type(img[0, 0]) is tuple):
+				newImg[x, y] = img[x, y]
+			else:
+				# TODO: ASK: IS AVERAGE CORRECT?
+				newImg[x, y] = (img[x, y]/2 + img[x, y-1]/2)
+			for i in range(y, img.shape[1]):
+				newImg[x, i+1] = img[x, i]
+	return newImg
 
-def detectSeam(img, inverseImgMap, alongX, srcSeamMap, output, index):
-	energy = energyE1(img)
-	minEnergy = cumulativeMinEnergy(energy, alongX)
-	(seamPoints, minEnergyVal) = findMinSeam(minEnergy, alongX)
+def removeMinSeam(img, inverseImgMap, alongX, srcSeamMap, output, seamPoints, index):
 	updateSeamMap(srcSeamMap, inverseImgMap, seamPoints, index, alongX)
 	newImg = deletePoints(img, seamPoints, alongX)
 	newInverseMap = deletePoints(inverseImgMap, seamPoints, alongX)
 	output = deletePoints(output, seamPoints, alongX)
+	return (newImg, newInverseMap, output)
+
+def addMinSeam(img, inverseImgMap, alongX, srcSeamMap, output, seamPoints, index):
+	updateSeamMap(srcSeamMap, inverseImgMap, seamPoints, index, alongX)
+	newImg = addPoints(img, seamPoints, alongX)
+	newInverseMap = addPoints(inverseImgMap, seamPoints, alongX)
+	output = addPoints(output, seamPoints, alongX)
 	return (newImg, newInverseMap, output)
 
 def detectMinSeam(img, alongX):
@@ -135,7 +156,7 @@ def detectMinSeam(img, alongX):
 	minEnergy = cumulativeMinEnergy(energy, alongX)
 	(seamPoints, minEnergyVal) = findMinSeam(minEnergy, alongX)
 	newImg = deletePoints(img, seamPoints, alongX)
-	return (newImg, minEnergyVal)
+	return (newImg, minEnergyVal, seamPoints)
 
 def initialization(shape):
 	srcSeamMap = np.ones(shape, dtype='int')*(shape[0] + shape[1])
@@ -145,46 +166,54 @@ def initialization(shape):
 			inverseImgMap[i, j] = (i, j)
 	return (srcSeamMap, inverseImgMap)
 
-def detectSeams(numSeamsx, numSeamsy, src):
+def detectSeams(numSeamsx, numSeamsy, src, remove=True):
 	bw = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
 	transportMap = np.ones((numSeamsx+1, numSeamsy+1))
 	bitMap = np.ones((numSeamsx+1, numSeamsy+1), dtype=bool)
+	seamPointsList = [[None for _ in range(numSeamsy+1)] for _ in range(numSeamsx+1)]
 	bwList = [None]*(numSeamsx+1)
 	transportMap[0, 0] = 0
 	bwList[0] = bw
 	for x in range(numSeamsx):
-		(bwList[x+1], minEnergyVal) = detectMinSeam(bwList[x], alongX = True)
+		(bwList[x+1], minEnergyVal, seamPointsList[x+1][0]) = detectMinSeam(bwList[x], alongX = True)
 		transportMap[x+1, 0] = minEnergyVal
 		bitMap[x+1, 0] = True
 	for y in range(numSeamsy):
-		(bwList[0], minEnergyVal) = detectMinSeam(bwList[0], alongX = False)
+		(bwList[0], minEnergyVal, seamPointsList[0][y+1]) = detectMinSeam(bwList[0], alongX = False)
 		transportMap[0, y+1] = minEnergyVal
 		bitMap[0, y+1] = False
 		for x in range(numSeamsx):
-			(bwx, minEnergyValx) = detectMinSeam(bwList[x], alongX = True)
-			(bwy, minEnergyValy) = detectMinSeam(bwList[x+1], alongX = False)
+			(bwx, minEnergyValx, seamPointsx) = detectMinSeam(bwList[x], alongX = True)
+			(bwy, minEnergyValy, seamPointsy) = detectMinSeam(bwList[x+1], alongX = False)
 			if((minEnergyValx + transportMap[x, y+1]) < (minEnergyValy + transportMap[x+1, y])):
 				bwList[x+1] = bwx
 				transportMap[x+1, y+1] = (minEnergyValx + transportMap[x, y+1])
 				bitMap[x+1, y+1] = True
+				seamPointsList[x+1][y+1] = seamPointsx
 			else:
 				bwList[x+1] = bwy
 				transportMap[x+1, y+1] = (minEnergyValy + transportMap[x+1, y])
 				bitMap[x+1, y+1] = False
-	(i, j, seamsOrder) = (numSeamsx, numSeamsy, [])
+				seamPointsList[x+1][y+1] = seamPointsy
+	(i, j, seamsOrder, seamsOptimalList) = (numSeamsx, numSeamsy, [], [])
 	while(not (i==0 and j==0)):
 		if(bitMap[i, j]):
 			i-=1
 			seamsOrder.append(True)
+			seamsOptimalList.append(seamPointsList[i+1][j])
 		else:
 			j-=1
 			seamsOrder.append(False)
+			seamsOptimalList.append(seamPointsList[i][j+1])
 	seamsOrder.reverse()
+	seamsOptimalList.reverse()
 	(srcSeamMap, inverseImgMap) = initialization(bw.shape) 
 	(index, output, bw) = (0, src.copy(), cv2.cvtColor(src, cv2.COLOR_BGR2GRAY))
-	for alongX in seamsOrder:
-		(bw, inverseImgMap, output) = detectSeam(bw, inverseImgMap, alongX, srcSeamMap, output, index)
-		index+=1
+	for index in range(len(seamsOrder)):
+		if(remove):
+			(bw, inverseImgMap, output) = removeMinSeam(bw, inverseImgMap, seamsOrder[index], srcSeamMap, output, seamsOptimalList[index], index)
+		else:
+			(bw, inverseImgMap, output) = addMinSeam(bw, inverseImgMap, seamsOrder[index], srcSeamMap, output, seamsOptimalList[index], index)
 	return (srcSeamMap, output)
 
 def displaySeams(src, srcSeamMap, numSeamsx, numSeamsy):
@@ -199,9 +228,8 @@ def displaySeams(src, srcSeamMap, numSeamsx, numSeamsy):
 
 if __name__== "__main__":
 	src = cv2.imread("./sampleImages/s2.jpg", cv2.IMREAD_COLOR)
-	numSeamsx = 20
-	numSeamsy = 40
-	(srcSeamMap, output) = detectSeams(numSeamsx, numSeamsy, src)
+	(numSeamsx, numSeamsy) = (20, 10)
+	(srcSeamMap, output) = detectSeams(numSeamsx, numSeamsy, src, remove=True)
 	srcSeam = displaySeams(src, srcSeamMap, numSeamsx, numSeamsy)
 	cv2.imshow("src", src)
 	cv2.imshow("output", output)
