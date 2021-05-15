@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 def saliency(gray):
 	saliency = cv2.saliency.StaticSaliencyFineGrained_create()
 	(success, saliencyMap) = saliency.computeSaliency(gray)
-	return gray
+	return saliencyMap
 
 def energyL1(gray):
 	grad_x = cv2.Sobel(gray, cv2.CV_16S, 1, 0, ksize=3, scale=1, delta=0, borderType=cv2.BORDER_DEFAULT)
@@ -17,7 +17,8 @@ def energyL1(gray):
 	return grad
 
 def energyFunction(gray, mask):
-	energy = energyL1(gray).astype('float64')
+	energy = saliency(gray).astype('float64')
+	# energy = energyL1(gray).astype('float64')	
 	energy[np.where(mask>0)] = -1000000
 	# np.set_printoptions(threshold=sys.maxsize)
 	# print(energy[-1, :])
@@ -171,11 +172,12 @@ def addSrcImgPoints(img, seamPoints, alongX):
 				newImg[x, i+1] = img[x, i]
 	return newImg
 
-def removeMinSeam(inverseImgMap, alongX, srcSeamMap, output, seamPoints, index):
+def removeMinSeam(inverseImgMap, alongX, srcSeamMap, output, seamPoints, index, mask):
 	updateSeamMap(srcSeamMap, inverseImgMap, seamPoints, index, alongX)
 	newInverseMap = deletePoints(inverseImgMap, seamPoints, alongX)
 	output = deletePoints(output, seamPoints, alongX)
-	return (newInverseMap, output)
+	newMask = deletePoints(mask, seamPoints, alongX)
+	return (newInverseMap, output, newMask)
 
 def addMinSeam(inverseImgMap, alongX, srcSeamMap, output, seamPoints, index):
 	updateSeamMap(srcSeamMap, inverseImgMap, seamPoints, index, alongX)
@@ -240,6 +242,7 @@ def detectSeams(numSeamsx, numSeamsy, src, mask, remove=True):
 			j-=1
 			seamsOrder.append(False)
 			seamsOptimalList.append(seamPointsList[i][j+1])
+	newMask = mask.copy()
 	seamsOrder.reverse()
 	seamsOptimalList.reverse()
 	(srcSeamMap, inverseImgMap) = initialization(bw.shape) 
@@ -247,7 +250,7 @@ def detectSeams(numSeamsx, numSeamsy, src, mask, remove=True):
 	# (numSeams, imageEnergy) = ([], [])
 	for index in range(len(seamsOrder)):
 		if(remove):
-			(inverseImgMap, output) = removeMinSeam(inverseImgMap, seamsOrder[index], srcSeamMap, output, seamsOptimalList[index], index)
+			(inverseImgMap, output, newMask) = removeMinSeam(inverseImgMap, seamsOrder[index], srcSeamMap, output, seamsOptimalList[index], index, newMask)
 		else:
 			(inverseImgMap, output) = addMinSeam(inverseImgMap, seamsOrder[index], srcSeamMap, output, seamsOptimalList[index], index)
 		# numSeams.append(index)
@@ -257,11 +260,11 @@ def detectSeams(numSeamsx, numSeamsy, src, mask, remove=True):
 	# plt.ylabel('image energy')
 	# plt.title('Image energy function vs number of seams')
 	# plt.show()
-	return (srcSeamMap, seamsOrder, output)
+	return (srcSeamMap, seamsOrder, output, newMask)
 
 def displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy):
 	srcSeam = src.copy()
-	for x in range(numSeamsx+numSeamsy):
+	for x in range(len(seamsOrder)):
 		for i in range(src.shape[0]):
 			for j in range(src.shape[1]):
 				if(srcSeamMap[i, j]==x):
@@ -308,13 +311,32 @@ def readMask(src):
 	return mask
 
 if __name__== "__main__":
-	src = cv2.imread("./sampleImages/s3.jpg", cv2.IMREAD_COLOR)
-	mask = readMask(src)
+	src = cv2.imread("./sampleImages/s2.jpg", cv2.IMREAD_COLOR)
+	orimask = readMask(src)
+	mask = orimask.copy()
+	output = src.copy()
 	(numSeamsx, numSeamsy) = (30, 0)
-	(srcSeamMap, seamsOrder, output) = detectSeams(numSeamsx, numSeamsy, src, mask, remove=True)
-	srcSeam = displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy)
-	cv2.imshow("src", src)
-	cv2.imshow("mask", mask)
-	cv2.imshow("output", output)
+	p = 0
+	while (len(np.where(mask > 0)[0]) > 0):
+		if(p%2 == 0):
+			(srcSeamMap, seamsOrder, output, mask) = detectSeams(1, 0, output, mask, remove=True)
+		else:
+			(srcSeamMap, seamsOrder, output, mask) = detectSeams(0, 1, output, mask, remove=True)
+		p += 1	
+		
+	# (srcSeamMap, seamsOrder, output) = detectSeams(numSeamsx, numSeamsy, src, mask, remove=True)
+	# srcSeam = displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy)
+	print(output.shape)
+	print(src.shape)
+	(diff_x, diff_y) = (src.shape[0] - output.shape[0], src.shape[1] - output.shape[1])
+	print(diff_x, diff_y)
+	# cv2.imshow("Before Insertion", output)
+	cv2.imwrite("Before_Insertion.jpg", output)
+	(srcSeamMap, seamsOrder, output, mask) = detectSeams(diff_x, diff_y, output, mask, remove=False)
+	# cv2.imshow("src", src)
+	# cv2.imshow("mask", orimask)
+	cv2.imwrite("mask.jpg", orimask)
+	# cv2.imshow("After Insertion", output)
+	cv2.imwrite("After_Insertion.jpg", output)
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
