@@ -1,4 +1,8 @@
 # seamCarving
 Digital Image Processing COL783 - Assignment 3
 
-Run: python seamCarve.py 
+For Image Retargeting
+Run: python retargeting.py
+ 
+For Object Removal
+Run: python objectRemoval.py
