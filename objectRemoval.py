@@ -6,7 +6,10 @@ import matplotlib.pyplot as plt
 def saliency(gray):
 	saliency = cv2.saliency.StaticSaliencyFineGrained_create()
 	(success, saliencyMap) = saliency.computeSaliency(gray)
-	return gray
+	cv2.imshow("saliencyMap", saliencyMap)
+	cv2.waitKey(0)
+	cv2.destroyAllWindows()
+	return saliencyMap
 
 def energyL1(gray):
 	grad_x = cv2.Sobel(gray, cv2.CV_16S, 1, 0, ksize=3, scale=1, delta=0, borderType=cv2.BORDER_DEFAULT)
@@ -17,7 +20,7 @@ def energyL1(gray):
 	return grad
 
 def energyFunction(gray, mask):
-	energy = energyL1(gray).astype('float64')
+	energy = saliency(gray).astype('float64')
 	energy[np.where(mask>0)] = -1000000
 	# np.set_printoptions(threshold=sys.maxsize)
 	# print(energy[-1, :])
@@ -310,7 +313,7 @@ def readMask(src):
 if __name__== "__main__":
 	src = cv2.imread("./sampleImages/s3.jpg", cv2.IMREAD_COLOR)
 	mask = readMask(src)
-	(numSeamsx, numSeamsy) = (30, 0)
+	(numSeamsx, numSeamsy) = (1, 0)
 	(srcSeamMap, seamsOrder, output) = detectSeams(numSeamsx, numSeamsy, src, mask, remove=True)
 	srcSeam = displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy)
 	cv2.imshow("src", src)
