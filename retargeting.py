@@ -166,17 +166,19 @@ def addSrcImgPoints(img, seamPoints, alongX):
 				newImg[x, i+1] = img[x, i]
 	return newImg
 
-def removeMinSeam(inverseImgMap, alongX, srcSeamMap, output, seamPoints, index):
+def removeMinSeam(inverseImgMap, alongX, srcSeamMap, output, bw, seamPoints, index):
 	updateSeamMap(srcSeamMap, inverseImgMap, seamPoints, index, alongX)
 	newInverseMap = deletePoints(inverseImgMap, seamPoints, alongX)
 	output = deletePoints(output, seamPoints, alongX)
-	return (newInverseMap, output)
+	bw = deletePoints(bw, seamPoints, alongX)
+	return (newInverseMap, output, bw)
 
-def addMinSeam(inverseImgMap, alongX, srcSeamMap, output, seamPoints, index):
+def addMinSeam(inverseImgMap, alongX, srcSeamMap, output, bw, seamPoints, index):
 	updateSeamMap(srcSeamMap, inverseImgMap, seamPoints, index, alongX)
 	newInverseMap = deletePoints(inverseImgMap, seamPoints, alongX)
 	output = addSrcImgPoints(output, seamPoints, alongX)
-	return (newInverseMap, output)
+	bw = addSrcImgPoints(bw, seamPoints, alongX)
+	return (newInverseMap, output, bw)
 
 def detectMinSeam(img, alongX):
 	energy = energyFunction(img)
@@ -239,17 +241,12 @@ def detectSeams(numSeamsx, numSeamsy, src, remove=True):
 	(numSeams, imageEnergy) = ([], [])
 	for index in range(len(seamsOrder)):
 		if(remove):
-			(inverseImgMap, output) = removeMinSeam(inverseImgMap, seamsOrder[index], srcSeamMap, output, seamsOptimalList[index], index)
+			(inverseImgMap, output, bw) = removeMinSeam(inverseImgMap, seamsOrder[index], srcSeamMap, output, bw, seamsOptimalList[index], index)
 		else:
-			(inverseImgMap, output) = addMinSeam(inverseImgMap, seamsOrder[index], srcSeamMap, output, seamsOptimalList[index], index)
+			(inverseImgMap, output, bw) = addMinSeam(inverseImgMap, seamsOrder[index], srcSeamMap, output, bw, seamsOptimalList[index], index)
 		numSeams.append(index)
-		imageEnergy.append(energyMeasure(output))
-	plt.plot(numSeams, imageEnergy)
-	plt.xlabel('reduction in img size')
-	plt.ylabel('image energy')
-	plt.title('Image energy function vs number of seams')
-	plt.show()
-	return (srcSeamMap, seamsOrder, output)
+		imageEnergy.append(energyMeasure(bw))
+	return (srcSeamMap, seamsOrder, output, imageEnergy, numSeams)
 
 def displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy):
 	srcSeam = src.copy()
@@ -267,7 +264,12 @@ def displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy):
 if __name__== "__main__":
 	src = cv2.imread("./sampleImages/s1.jpg", cv2.IMREAD_COLOR)
 	(numSeamsx, numSeamsy) = (70, 0)
-	(srcSeamMap, seamsOrder, output) = detectSeams(numSeamsx, numSeamsy, src, remove=True)
+	(srcSeamMap, seamsOrder, output, imageEnergy, numSeams) = detectSeams(numSeamsx, numSeamsy, src, remove=True)
+	plt.plot(numSeams, imageEnergy)
+	plt.xlabel('reduction in img size')
+	plt.ylabel('image energy')
+	plt.title('Image energy function vs number of seams')
+	plt.show()
 	srcSeam = displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy)
 	cv2.imshow("src", src)
 	cv2.imshow("output", output)
