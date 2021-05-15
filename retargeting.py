@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import sys
 import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw
+from matplotlib import cm
 
 def saliency(gray):
 	saliency = cv2.saliency.StaticSaliencyFineGrained_create()
@@ -250,6 +252,7 @@ def detectSeams(numSeamsx, numSeamsy, src, remove=True):
 
 def displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy):
 	srcSeam = src.copy()
+	seam_array = []
 	for x in range(numSeamsx+numSeamsy):
 		for i in range(src.shape[0]):
 			for j in range(src.shape[1]):
@@ -258,8 +261,9 @@ def displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy):
 					if(not seamsOrder[x]):
 						srcSeam[i, j] = [0, 255, 0]
 		cv2.imshow("srcSeams", srcSeam)
+		seam_array.append(Image.fromarray(srcSeam[..., ::-1]))
 		cv2.waitKey(500)
-	return srcSeam
+	return srcSeam, seam_array
 
 if __name__== "__main__":
 	src = cv2.imread("./sampleImages/s1.jpg", cv2.IMREAD_COLOR)
@@ -270,8 +274,11 @@ if __name__== "__main__":
 	plt.ylabel('image energy')
 	plt.title('Image energy function vs number of seams')
 	plt.show()
-	srcSeam = displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy)
+	srcSeam, seam_array = displaySeams(src, srcSeamMap, seamsOrder, numSeamsx, numSeamsy)
+	seam_array[0].save('imagedraw.gif', save_all=True, append_images=seam_array[1:], optimize=False, duration=200, loop=0)
 	cv2.imshow("src", src)
 	cv2.imshow("output", output)
+	cv2.imwrite("output.jpg", output)
+	cv2.imwrite("seams.jpg", srcSeam)
 	cv2.waitKey(0)
 	cv2.destroyAllWindows()
